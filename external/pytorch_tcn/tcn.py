@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from numpy.typing import ArrayLike
 import numpy as np
+from pytorch_tcn.buffer import BufferIO 
 
 # Try to import new weight_norm from torch.nn.utils.parametrizations
 # But also keep the deprecated version for compatibility
@@ -416,9 +417,9 @@ class TemporalBlock(BaseTCN):
     def forward(
             self,
             x,
-            embeddings,
-            inference,
-            in_buffers=None,
+            embeddings=None,
+            inference=False,
+            buffer_io: BufferIO | None = None,
             ):
         
         if in_buffers:
@@ -426,17 +427,17 @@ class TemporalBlock(BaseTCN):
         else:
             in_buffer_1, in_buffer_2 = None, None
 
-        out = self.conv1(x, inference=inference, in_buffer = in_buffer_1)
-        out = self.apply_norm( self.norm1, out )
+        out = self.conv1(x, inference=inference, buffer_io=buffer_io)
+        out = self.apply_norm(self.norm1, out)
 
         if embeddings is not None:
-            out = self.apply_embeddings( out, embeddings )
+            out = self.apply_embeddings(out, embeddings)
 
         out = self.activation1(out)
         out = self.dropout1(out)
 
-        out = self.conv2(out, inference=inference, in_buffer = in_buffer_2)
-        out = self.apply_norm( self.norm2, out )
+        out = self.conv2(out, inference=inference, buffer_io=buffer_io)
+        out = self.apply_norm(self.norm2, out)
         out = self.activation2(out)
         out = self.dropout2(out)
 
@@ -634,7 +635,7 @@ class TCN(BaseTCN):
             x,
             embeddings=None,
             inference=False,
-            in_buffers=None,
+            buffer_io: BufferIO | None = None,
             ):
         if inference and not self.causal:
             raise ValueError(
@@ -661,7 +662,7 @@ class TCN(BaseTCN):
                     x,
                     embeddings=embeddings,
                     inference=inference,
-                    in_buffers=layer_in_buffers,
+                    buffer_io=buffer_io,
                     )
                 if self.downsample_skip_connection[ index ] is not None:
                     skip_out = self.downsample_skip_connection[ index ]( skip_out )
@@ -682,7 +683,7 @@ class TCN(BaseTCN):
                     x,
                     embeddings=embeddings,
                     inference=inference,
-                    in_buffers=layer_in_buffers,
+                    buffer_io=buffer_io,
                     )
         if self.projection_out is not None:
             x = self.projection_out( x )
