@@ -4,8 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from numpy.typing import ArrayLike
 import numpy as np
-from pytorch_tcn.buffer import BufferIO 
-
 # Try to import new weight_norm from torch.nn.utils.parametrizations
 # But also keep the deprecated version for compatibility
 try:
@@ -421,11 +419,6 @@ class TemporalBlock(BaseTCN):
             inference=False,
             buffer_io: BufferIO | None = None,
             ):
-        
-        if in_buffers:
-            in_buffer_1, in_buffer_2 = in_buffers
-        else:
-            in_buffer_1, in_buffer_2 = None, None
 
         out = self.conv1(x, inference=inference, buffer_io=buffer_io)
         out = self.apply_norm(self.norm1, out)
@@ -630,65 +623,42 @@ class TCN(BaseTCN):
                     )
         return
 
-    def forward(
-            self,
-            x,
-            embeddings=None,
-            inference=False,
-            buffer_io: BufferIO | None = None,
-            ):
+    def forward(self, x, embeddings=None, inference=False, buffer_io: BufferIO | None = None):
         if inference and not self.causal:
-            raise ValueError(
-                """
-                This streaming inference mode is made for blockwise causal
-                processing and thus, is only supported for causal networks.
-                However, you selected a non-causal network.
-                """
-                )
+            raise ValueError("This streaming inference mode ... only for causal networks.")
         if self.input_shape == 'NLC':
             x = x.transpose(1, 2)
+
         if self.use_skip_connections:
             skip_connections = []
-            # Adding skip connections from each layer to the output
-            # Excluding the last layer, as it would not skip trainable weights
-            for index, layer in enumerate( self.network ):
-                
-                if in_buffers:
-                    layer_in_buffers = in_buffers[ 2*index: ]
-                else:
-                    layer_in_buffers = None
-
+            for index, layer in enumerate(self.network):
                 x, skip_out = layer(
                     x,
                     embeddings=embeddings,
                     inference=inference,
                     buffer_io=buffer_io,
-                    )
-                if self.downsample_skip_connection[ index ] is not None:
-                    skip_out = self.downsample_skip_connection[ index ]( skip_out )
-                if index < len( self.network ) - 1:
-                    skip_connections.append( skip_out )
-            skip_connections.append( x )
-            x = torch.stack( skip_connections, dim=0 ).sum( dim=0 )
-            x = self.activation_skip_out( x )
+                )
+                if self.downsample_skip_connection[index] is not None:
+                    skip_out = self.downsample_skip_connection[index](skip_out)
+                if index < len(self.network) - 1:
+                    skip_connections.append(skip_out)
+            skip_connections.append(x)
+            x = torch.stack(skip_connections, dim=0).sum(dim=0)
+            x = self.activation_skip_out(x)
         else:
-            for index, layer in enumerate( self.network ):
-                
-                if in_buffers:
-                    layer_in_buffers = in_buffers[ 2*index: ]
-                else:
-                    layer_in_buffers = None
-                #print( 'TCN, embeddings:', embeddings.shape )
+            for layer in self.network:
                 x, _ = layer(
                     x,
                     embeddings=embeddings,
                     inference=inference,
                     buffer_io=buffer_io,
-                    )
+                )
+
         if self.projection_out is not None:
-            x = self.projection_out( x )
+            x = self.projection_out(x)
         if self.activation_out is not None:
-            x = self.activation_out( x )
+            x = self.activation_out(x)
         if self.input_shape == 'NLC':
             x = x.transpose(1, 2)
         return x
+
