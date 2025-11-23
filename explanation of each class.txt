@@ -1,0 +1,125 @@
+#############################################
+Dataset.py
+#############################################
+
+1️⃣ Loads .npz FoG data (xTensor and yTensor)
+
+It opens the dataset file and reads:
+- xTensor → movement signals (acc & gyro)
+- yTensor → labels (0 = no FoG, 1 = FoG)
+
+So it gives the model both the input signal and the correct answer.
+
+2️⃣ Converts it to PyTorch tensors
+
+Machine learning models in PyTorch only understand torch tensors, not numpy arrays.
+This step prepares the data so PyTorch can process and train on it.
+
+3️⃣ Applies normalization / preprocessing
+
+Sensors produce values with different ranges (e.g., accelerometer vs. gyroscope).
+Normalization rescales all features so the network learns faster and more accurately.
+
+4️⃣ Formats the data into the correct shape for the TCN model
+
+TCN expects input shaped like:
+
+(batch_size, channels, time_steps)
+
+but the file provides:
+
+(batch_size, time_steps, channels)
+
+--> So we swap axes to match what the model expects.
+
+5️⃣ Allows PyTorch DataLoader to iterate over samples
+
+By implementing __len__ and __getitem__, the dataset can be used with:
+
+        DataLoader(dataset, batch_size=32, shuffle=True)
+
+This gives efficient batching, shuffling, and mini-batch training.
+
+🧠 One-sentence version
+
+dataset.py loads and prepares the raw FoG data so the neural network receives clean, normalized, correctly-shaped training samples.
+
+###############################
+model.py
+###############################
+
+model.py defines the neural network architecture that will learn to classify FoG vs non-FoG.
+
+In our case, the model uses:
+
+        1. A Temporal Convolutional Network (TCN) for sequence feature extraction
+        2. A classifier layer that maps learned features → 2 classes (FoG / No-FoG)
+
+So essentially:
+
+sensor data → TCN → features → classifier → FoG prediction
+
+🧠 Why do we use mean(dim=2)?
+
+The TCN outputs something shaped like:
+
+        (batch, channels, time)
+
+This means:
+
+- Every time step (0–119) has its own feature vector.
+- But we want one prediction per window, not 120 predictions.
+
+So:
+
+➤ x.mean(dim=2)
+
+Averages over all time steps → gives one feature vector per sample.
+
+After this step the shape becomes:
+
+        (batch, channels)
+
+Now the classifier can easily decide:
+
+- Class 0 = no FoG
+- Class 1 = FoG
+
+###############################
+train.py
+###############################
+
+train.py trains the FoG classification model by loading data, splitting it into train/test sets,
+running multiple training epochs, minimizing loss through backpropagation, and saving the final trained weights.
+
+
+###############################
+evaluate.py
+###############################
+evaluate.py is used after training to measure how well the model performs.
+It computes classification metrics using the data not used for training, typically the test set.
+
+This file provides:
+
+1. Accuracy — how many predictions are correct
+2. F1-score — how well it handles imbalanced data (important because FoG is rare)
+3. Confusion matrix — shows where the model confuses FoG vs non-FoG
+
+So evaluate.py tells you if the model is really learning or just guessing.
+
+For FoG detection, F1 is more important than accuracy, because the model could get high accuracy by always predicting “no FoG”.
+
+
+###############################
+main.py
+###############################
+
+Load, train, and evaluate the model using clean, readable code
+
+Avoid cluttering notebooks or other files
+
+Serve as a single script to launch the entire pipeline
+
+In short:
+
+main.py is the controller that ties everything together.
